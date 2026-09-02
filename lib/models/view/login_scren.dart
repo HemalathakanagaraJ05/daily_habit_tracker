@@ -1,6 +1,9 @@
-import 'package:daily_habit_tracker/models/view/botton_appbar_Screen.dart';
+import 'package:daily_habit_tracker/auth%20controller/auth_controller.dart';
 import 'package:daily_habit_tracker/models/view/register_scren.dart';
+// import 'package:daily_habit_tracker/models/view/botton_appbar_Screen.dart';
+// import 'package:daily_habit_tracker/models/view/register_scren.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,7 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
-
+  final LoginController controller = Get.put(LoginController());
   bool obscurePassword = true;
   bool isLoading = false;
 
@@ -23,27 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
     emailController.dispose();
     passwordController.dispose();
     super.dispose();
-  }
-
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      isLoading = true;
-    });
-
-    await Future.delayed(const Duration(seconds: 1));
-
-    if (!mounted) return;
-
-    setState(() {
-      isLoading = false;
-    });
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-    );
   }
 
   @override
@@ -145,12 +127,18 @@ class _LoginScreenState extends State<LoginScreen> {
                   icon: Icons.email_outlined,
                 ),
                 validator: (value) {
+                  print('email ID: Please enter your email');
                   if (value == null || value.trim().isEmpty) {
                     return 'Please enter your email';
                   }
 
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
+                  final email = value.trim();
+
+                  final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$');
+                  print(' email id :$email');
+
+                  if (!emailRegex.hasMatch(email)) {
+                    return 'Please enter a valid Gmail address';
                   }
 
                   return null;
@@ -170,45 +158,43 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 9),
 
-              TextFormField(
-                controller: passwordController,
-                obscureText: obscurePassword,
-                decoration: _inputDecoration(
-                  hint: 'Enter your password',
-                  icon: Icons.lock_outline_rounded,
-                  suffix: IconButton(
-                    onPressed: () {
-                      setState(() {
-                        obscurePassword = !obscurePassword;
-                      });
-                    },
-                    icon: Icon(
-                      obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                      color: const Color(0xFF8A8FA3),
+              Obx(
+                () => TextFormField(
+                  controller: controller.passwordController,
+                  obscureText: controller.obscurePassword.value,
+                  decoration: _inputDecoration(
+                    hint: 'Enter your password',
+                    icon: Icons.lock_outline_rounded,
+                    suffix: IconButton(
+                      onPressed: controller.togglePassword,
+                      icon: Icon(
+                        controller.obscurePassword.value
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: const Color(0xFF8A8FA3),
+                      ),
                     ),
                   ),
+                  validator: (value) {
+                    print('password: Please enter your password');
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your password';
+                    }
+                    print('password length: ${value.length}');
+                    if (value.length < 6) {
+                      return 'Password must be at least 6 characters';
+                    }
+
+                    return null;
+                  },
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your password';
-                  }
-
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-
-                  return null;
-                },
               ),
-
               const SizedBox(height: 10),
 
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: controller.forgotPassword,
                   child: const Text(
                     'Forgot Password?',
                     style: TextStyle(
@@ -221,38 +207,35 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 15),
 
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : _login,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF667EEA),
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: const Color(
-                      0xFF667EEA,
-                    ).withOpacity(0.6),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+              Obx(
+                () => SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: controller.isLoading.value
+                        ? null
+                        : () {
+                            if (_formKey.currentState!.validate()) {
+                              controller.login();
+                            }
+                          },
+                    child: controller.isLoading.value
+                        ? const SizedBox(
+                            width: 23,
+                            height: 23,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Login',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 23,
-                          height: 23,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Login',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
                 ),
               ),
             ],
@@ -314,10 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             GestureDetector(
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                );
+                Get.to(() => RegisterScreen());
               },
               child: const Text(
                 'Create Account',

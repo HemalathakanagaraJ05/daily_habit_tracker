@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "3185423692",
+    "project_id": "dht-471f6",
+    "storage_bucket": "dht-471f6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:3185423692:android:62502a4596ec5f511a0be9",
+        "android_client_info": {
+          "package_name": "com.example.daily_habit_tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4-3OP6TaI-CjNXYPqTdHBQW5XfJAyaSI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,5 +1,7 @@
-import 'package:daily_habit_tracker/models/view/botton_appbar_Screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:daily_habit_tracker/models/view/botton_appbar_Screen.dart';
 import 'package:daily_habit_tracker/models/view/login_scren.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -37,19 +39,72 @@ class _RegisterScreenState extends State<RegisterScreen> {
       isLoading = true;
     });
 
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      final name = nameController.text.trim();
+      final email = emailController.text.trim();
+      final password = passwordController.text.trim();
 
-    if (!mounted) return;
+      // Create account in Firebase Authentication
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
 
-    setState(() {
-      isLoading = false;
-    });
+      final User? user = userCredential.user;
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-      (route) => false,
-    );
+      if (user == null) {
+        throw Exception('User creation failed');
+      }
+
+      // Save user details in Firestore
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'name': name,
+        'email': email,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account created successfully!')),
+      );
+
+      // Go to login screen
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      String message = 'Something went wrong';
+
+      if (e.code == 'email-already-in-use') {
+        message = 'This email is already registered.';
+      } else if (e.code == 'invalid-email') {
+        message = 'Please enter a valid email address.';
+      } else if (e.code == 'weak-password') {
+        message = 'Password is too weak.';
+      } else if (e.code == 'operation-not-allowed') {
+        message = 'Email/password registration is not enabled.';
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
   }
 
   @override
