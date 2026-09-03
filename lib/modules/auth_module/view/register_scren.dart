@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 // import 'package:daily_habit_tracker/models/view/botton_appbar_Screen.dart';
-import 'package:daily_habit_tracker/models/view/login_scren.dart';
+import 'package:daily_habit_tracker/modules/auth_module/view/login_scren.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 

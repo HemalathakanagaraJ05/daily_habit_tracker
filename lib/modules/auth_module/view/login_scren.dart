@@ -1,5 +1,5 @@
-import 'package:daily_habit_tracker/auth%20controller/auth_controller.dart';
-import 'package:daily_habit_tracker/models/view/register_scren.dart';
+import 'package:daily_habit_tracker/modules/auth_module/contorller/auth_controller.dart';
+import 'package:daily_habit_tracker/modules/auth_module/view/register_scren.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 

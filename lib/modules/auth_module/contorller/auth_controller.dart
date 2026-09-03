@@ -1,6 +1,7 @@
-import 'package:daily_habit_tracker/models/view/botton_appbar_Screen.dart';
+import 'package:daily_habit_tracker/modules/auth_module/view/about_profile_screen.dart';
+// import 'package:daily_habit_tracker/modules/auth_module/view/botton_appbar_Screen.dart';
 // import 'package:daily_habit_tracker/models/view/home_screen.dart';
-import 'package:daily_habit_tracker/models/view/register_scren.dart';
+import 'package:daily_habit_tracker/modules/auth_module/view/register_scren.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -46,7 +47,7 @@ class LoginController extends GetxController {
       print('===================================');
 
       // HOME SCREEN
-      Get.offAll(() => const MainNavigationScreen());
+      Get.offAll(() => const ProfileSetupScreen());
     } on FirebaseAuthException catch (e) {
       print('========== FIREBASE LOGIN ERROR ==========');
       print('Error Code: ${e.code}');

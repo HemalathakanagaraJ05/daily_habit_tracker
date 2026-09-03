@@ -1,10 +1,10 @@
-import 'package:daily_habit_tracker/models/view/add_habite_screen.dart';
-import 'package:daily_habit_tracker/models/view/statistics_Screen.dart';
+import 'package:daily_habit_tracker/modules/statistics/view/add_habite_screen.dart';
+import 'package:daily_habit_tracker/modules/statistics/view/statistics_Screen.dart';
 import 'package:flutter/material.dart';
 
-import 'home_screen.dart';
-import 'history_screen.dart';
-import 'profile_screen.dart';
+import '../../Home_module/view/home_screen.dart';
+import '../../history/view/history_screen.dart';
+import '../../profile/view/profile_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
