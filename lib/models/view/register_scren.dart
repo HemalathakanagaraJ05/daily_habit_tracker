@@ -40,9 +40,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      final name = nameController.text.trim();
-      final email = emailController.text.trim();
-      final password = passwordController.text.trim();
+      final name = nameController.text.toString();
+      ();
+      final email = emailController.text.toString();
+      final password = passwordController.text.toString();
 
       // Create account in Firebase Authentication
       final UserCredential userCredential = await FirebaseAuth.instance
@@ -62,6 +63,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      print('User registered: ${user.uid}, Name: $name, Email: $email');
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(

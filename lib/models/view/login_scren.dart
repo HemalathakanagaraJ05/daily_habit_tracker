@@ -1,7 +1,5 @@
 import 'package:daily_habit_tracker/auth%20controller/auth_controller.dart';
 import 'package:daily_habit_tracker/models/view/register_scren.dart';
-// import 'package:daily_habit_tracker/models/view/botton_appbar_Screen.dart';
-// import 'package:daily_habit_tracker/models/view/register_scren.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -15,18 +13,9 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+  // IMPORTANT:
+  // Email and password controllers are now inside LoginController.
   final LoginController controller = Get.put(LoginController());
-  bool obscurePassword = true;
-  bool isLoading = false;
-
-  @override
-  void dispose() {
-    emailController.dispose();
-    passwordController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // LOGO
         Center(
           child: Container(
             width: 75,
@@ -80,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         const SizedBox(height: 28),
 
+        // TITLE
         const Center(
           child: Text(
             'Welcome Back 👋',
@@ -103,11 +94,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
         const SizedBox(height: 35),
 
+        // FORM
         Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // EMAIL LABEL
               const Text(
                 'Email Address',
                 style: TextStyle(
@@ -119,26 +112,27 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 9),
 
+              // EMAIL
               TextFormField(
-                controller: emailController,
+                controller: controller.emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: _inputDecoration(
                   hint: 'Enter your email',
                   icon: Icons.email_outlined,
                 ),
                 validator: (value) {
-                  print('email ID: Please enter your email');
                   if (value == null || value.trim().isEmpty) {
                     return 'Please enter your email';
                   }
 
                   final email = value.trim();
 
-                  final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$');
-                  print(' email id :$email');
+                  final emailRegex = RegExp(
+                    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+                  );
 
                   if (!emailRegex.hasMatch(email)) {
-                    return 'Please enter a valid Gmail address';
+                    return 'Please enter a valid email address';
                   }
 
                   return null;
@@ -147,6 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 20),
 
+              // PASSWORD LABEL
               const Text(
                 'Password',
                 style: TextStyle(
@@ -158,6 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 9),
 
+              // PASSWORD
               Obx(
                 () => TextFormField(
                   controller: controller.passwordController,
@@ -176,11 +172,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   validator: (value) {
-                    print('password: Please enter your password');
                     if (value == null || value.isEmpty) {
                       return 'Please enter your password';
                     }
-                    print('password length: ${value.length}');
+
                     if (value.length < 6) {
                       return 'Password must be at least 6 characters';
                     }
@@ -189,8 +184,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
               ),
+
               const SizedBox(height: 10),
 
+              // FORGOT PASSWORD
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -207,6 +204,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 15),
 
+              // LOGIN BUTTON
               Obx(
                 () => SizedBox(
                   width: double.infinity,
@@ -219,6 +217,13 @@ class _LoginScreenState extends State<LoginScreen> {
                               controller.login();
                             }
                           },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF667EEA),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                     child: controller.isLoading.value
                         ? const SizedBox(
                             width: 23,
@@ -244,6 +249,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         const SizedBox(height: 25),
 
+        // OR
         Row(
           children: [
             const Expanded(child: Divider(color: Color(0xFFE1E2E8))),
@@ -260,11 +266,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
         const SizedBox(height: 25),
 
+        // GOOGLE BUTTON
         SizedBox(
           width: double.infinity,
           height: 52,
           child: OutlinedButton.icon(
-            onPressed: () {},
+            onPressed: () {
+              // Google login later
+            },
             icon: const Icon(
               Icons.g_mobiledata_rounded,
               size: 28,
@@ -288,6 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         const SizedBox(height: 28),
 
+        // REGISTER
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -297,7 +307,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             GestureDetector(
               onTap: () {
-                Get.to(() => RegisterScreen());
+                Get.to(() => const RegisterScreen());
               },
               child: const Text(
                 'Create Account',
@@ -314,6 +324,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // INPUT DECORATION
   InputDecoration _inputDecoration({
     required String hint,
     required IconData icon,
