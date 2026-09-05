@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -8,47 +10,190 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<Map<String, dynamic>> habits = [
-    {
-      'title': 'Drink Water',
-      'subtitle': '8 glasses',
-      'icon': Icons.water_drop_rounded,
-      'completed': true,
-    },
-    {
-      'title': 'Morning Exercise',
-      'subtitle': '30 minutes',
-      'icon': Icons.fitness_center_rounded,
-      'completed': false,
-    },
-    {
-      'title': 'Read a Book',
-      'subtitle': '20 pages',
-      'icon': Icons.menu_book_rounded,
-      'completed': false,
-    },
-    {
-      'title': 'Meditation',
-      'subtitle': '10 minutes',
-      'icon': Icons.self_improvement_rounded,
-      'completed': false,
-    },
-  ];
+  String userName = '';
+  bool isProfileLoading = true;
+  bool isHabitsLoading = true;
+
+  final List<Map<String, dynamic>> habits = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+    _loadHabits();
+  }
+
+  // ----------------------------------------------------------
+  // LOAD USER PROFILE
+  // ----------------------------------------------------------
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final User? user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        if (!mounted) return;
+
+        setState(() {
+          isProfileLoading = false;
+        });
+
+        return;
+      }
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (!mounted) return;
+
+      if (snapshot.exists) {
+        final data = snapshot.data();
+
+        setState(() {
+          userName = data?['name'] ?? '';
+          isProfileLoading = false;
+        });
+      } else {
+        setState(() {
+          isProfileLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Profile Error: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        isProfileLoading = false;
+      });
+    }
+  }
+
+  // ----------------------------------------------------------
+  // LOAD HABITS FROM FIRESTORE
+  // ----------------------------------------------------------
+
+  Future<void> _loadHabits() async {
+    try {
+      final User? user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        if (!mounted) return;
+
+        setState(() {
+          isHabitsLoading = false;
+        });
+
+        return;
+      }
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('habits')
+          .orderBy('createdAt', descending: false)
+          .get();
+
+      if (!mounted) return;
+
+      final loadedHabits = snapshot.docs.map((doc) {
+        final data = doc.data();
+
+        return {
+          'id': doc.id,
+          'title': data['title'] ?? '',
+          'subtitle': data['subtitle'] ?? '',
+          'completed': data['completed'] ?? false,
+          'iconCode':
+              data['iconCode'] ?? Icons.check_circle_outline_rounded.codePoint,
+        };
+      }).toList();
+
+      setState(() {
+        habits.clear();
+        habits.addAll(loadedHabits);
+        isHabitsLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Habits Error: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        isHabitsLoading = false;
+      });
+    }
+  }
+
+  // ----------------------------------------------------------
+  // TOGGLE HABIT
+  // ----------------------------------------------------------
+
+  Future<void> toggleHabit(int index) async {
+    if (index < 0 || index >= habits.length) return;
+
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) return;
+
+    final String habitId = habits[index]['id'];
+
+    final bool newValue = !(habits[index]['completed'] ?? false);
+
+    // Update UI immediately
+    setState(() {
+      habits[index]['completed'] = newValue;
+    });
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('habits')
+          .doc(habitId)
+          .update({
+            'completed': newValue,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      debugPrint('Toggle Habit Error: $e');
+
+      // Revert if Firebase update fails
+      if (!mounted) return;
+
+      setState(() {
+        habits[index]['completed'] = !newValue;
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Unable to update habit')));
+    }
+  }
+
+  // ----------------------------------------------------------
+  // COMPLETED COUNT
+  // ----------------------------------------------------------
 
   int get completedCount {
     return habits.where((habit) => habit['completed'] == true).length;
   }
 
+  // ----------------------------------------------------------
+  // PROGRESS
+  // ----------------------------------------------------------
+
   double get progress {
     if (habits.isEmpty) return 0;
+
     return completedCount / habits.length;
   }
 
-  void toggleHabit(int index) {
-    setState(() {
-      habits[index]['completed'] = !habits[index]['completed'];
-    });
-  }
+  // ----------------------------------------------------------
+  // BUILD
+  // ----------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -61,8 +206,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushNamed(context, '/add-habit');
+        onPressed: () async {
+          await Navigator.pushNamed(context, '/add-habit');
+
+          // Reload habits after returning from Add Habit page
+          _loadHabits();
         },
         backgroundColor: const Color(0xFF667EEA),
         elevation: 5,
@@ -76,58 +224,77 @@ class _HomeScreenState extends State<HomeScreen> {
   // ----------------------------------------------------------
 
   Widget _buildMobileLayout() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 90),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 24),
-          _buildProgressCard(),
-          const SizedBox(height: 24),
-          _buildStats(),
-          const SizedBox(height: 28),
-          _buildSectionTitle(),
-          const SizedBox(height: 14),
-          _buildHabitList(),
-        ],
+    return RefreshIndicator(
+      onRefresh: _loadHabits,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 90),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+
+            const SizedBox(height: 24),
+
+            _buildProgressCard(),
+
+            const SizedBox(height: 24),
+
+            _buildStats(),
+
+            const SizedBox(height: 28),
+
+            _buildSectionTitle(),
+
+            const SizedBox(height: 14),
+
+            _buildHabitList(),
+          ],
+        ),
       ),
     );
   }
 
   // ----------------------------------------------------------
-  // DESKTOP / WEB
+  // DESKTOP
   // ----------------------------------------------------------
 
   Widget _buildDesktopLayout() {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1200),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 30),
+        child: RefreshIndicator(
+          onRefresh: _loadHabits,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
 
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 2, child: _buildProgressCard()),
-                  const SizedBox(width: 20),
-                  Expanded(child: _buildStats()),
-                ],
-              ),
+                const SizedBox(height: 30),
 
-              const SizedBox(height: 35),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: _buildProgressCard()),
 
-              _buildSectionTitle(),
+                    const SizedBox(width: 20),
 
-              const SizedBox(height: 16),
+                    Expanded(child: _buildStats()),
+                  ],
+                ),
 
-              _buildHabitGrid(),
-            ],
+                const SizedBox(height: 35),
+
+                _buildSectionTitle(),
+
+                const SizedBox(height: 16),
+
+                _buildHabitGrid(),
+              ],
+            ),
           ),
         ),
       ),
@@ -151,6 +318,10 @@ class _HomeScreenState extends State<HomeScreen> {
       greeting = 'Good Evening';
     }
 
+    final String profileLetter = userName.isNotEmpty
+        ? userName[0].toUpperCase()
+        : 'U';
+
     return Row(
       children: [
         Expanded(
@@ -165,16 +336,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
+
               const SizedBox(height: 5),
-              const Text(
-                'Hello, Hema 👋',
-                style: TextStyle(
+
+              Text(
+                isProfileLoading
+                    ? 'Hello...'
+                    : 'Hello, ${userName.isNotEmpty ? userName : 'User'} 👋',
+                style: const TextStyle(
                   fontSize: 27,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF202336),
                 ),
               ),
+
               const SizedBox(height: 5),
+
               Text(
                 _formattedDate(),
                 style: const TextStyle(fontSize: 14, color: Color(0xFF8A8FA3)),
@@ -208,16 +385,16 @@ class _HomeScreenState extends State<HomeScreen> {
         Container(
           width: 48,
           height: 48,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
               colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
             ),
             shape: BoxShape.circle,
           ),
-          child: const Center(
+          child: Center(
             child: Text(
-              'H',
-              style: TextStyle(
+              profileLetter,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 19,
                 fontWeight: FontWeight.w700,
@@ -342,7 +519,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
 
                     Text(
-                      progress == 1
+                      habits.isEmpty
+                          ? 'Add your first habit'
+                          : progress == 1
                           ? 'Amazing! All done 🎉'
                           : 'Keep going, you are doing great!',
                       style: TextStyle(
@@ -486,10 +665,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ----------------------------------------------------------
-  // HABIT LIST - MOBILE
+  // MOBILE HABIT LIST
   // ----------------------------------------------------------
 
   Widget _buildHabitList() {
+    if (isHabitsLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(30),
+          child: CircularProgressIndicator(color: Color(0xFF667EEA)),
+        ),
+      );
+    }
+
+    if (habits.isEmpty) {
+      return _buildEmptyHabit();
+    }
+
     return Column(
       children: List.generate(habits.length, (index) {
         return Padding(
@@ -501,10 +693,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ----------------------------------------------------------
-  // HABIT GRID - WEB
+  // DESKTOP HABIT GRID
   // ----------------------------------------------------------
 
   Widget _buildHabitGrid() {
+    if (isHabitsLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(30),
+          child: CircularProgressIndicator(color: Color(0xFF667EEA)),
+        ),
+      );
+    }
+
+    if (habits.isEmpty) {
+      return _buildEmptyHabit();
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -522,12 +727,55 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ----------------------------------------------------------
+  // EMPTY HABIT
+  // ----------------------------------------------------------
+
+  Widget _buildEmptyHabit() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.check_circle_outline_rounded,
+            size: 50,
+            color: Color(0xFF667EEA),
+          ),
+
+          const SizedBox(height: 14),
+
+          const Text(
+            'No habits yet',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF202336),
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          const Text(
+            'Tap + to create your first habit',
+            style: TextStyle(fontSize: 13, color: Color(0xFF8A8FA3)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
   // HABIT CARD
   // ----------------------------------------------------------
 
   Widget _habitCard(int index) {
     final habit = habits[index];
-    final bool completed = habit['completed'];
+
+    final bool completed = habit['completed'] == true;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
@@ -560,7 +808,12 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(15),
             ),
             child: Icon(
-              habit['icon'],
+              IconData(
+                // ignore: non_const_argument_for_const_parameter
+                habit['iconCode'] ??
+                    Icons.check_circle_outline_rounded.codePoint,
+                fontFamily: 'MaterialIcons',
+              ),
               color: completed
                   ? const Color(0xFF667EEA)
                   : const Color(0xFF85899B),
@@ -575,7 +828,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  habit['title'],
+                  habit['title'] ?? '',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -589,7 +842,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 4),
 
                 Text(
-                  habit['subtitle'],
+                  habit['subtitle'] ?? '',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF9A9EAE),
@@ -600,9 +853,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           GestureDetector(
-            onTap: () {
-              toggleHabit(index);
-            },
+            onTap: () => toggleHabit(index),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               width: 30,
@@ -630,73 +881,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // ----------------------------------------------------------
-  // ADD HABIT DIALOG
-  // ----------------------------------------------------------
-
-  // void _showAddHabitDialog() {
-  //   final TextEditingController controller = TextEditingController();
-
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return AlertDialog(
-  //         shape: RoundedRectangleBorder(
-  //           borderRadius: BorderRadius.circular(24),
-  //         ),
-  //         title: const Text(
-  //           'Add New Habit',
-  //           style: TextStyle(fontWeight: FontWeight.w700),
-  //         ),
-  //         content: TextField(
-  //           controller: controller,
-  //           decoration: InputDecoration(
-  //             hintText: 'Enter habit name',
-  //             filled: true,
-  //             fillColor: const Color(0xFFF6F7FA),
-  //             border: OutlineInputBorder(
-  //               borderRadius: BorderRadius.circular(14),
-  //               borderSide: BorderSide.none,
-  //             ),
-  //           ),
-  //         ),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () {
-  //               Navigator.pop(context);
-  //             },
-  //             child: const Text('Cancel'),
-  //           ),
-  //           ElevatedButton(
-  //             onPressed: () {
-  //               if (controller.text.trim().isNotEmpty) {
-  //                 setState(() {
-  //                   habits.add({
-  //                     'title': controller.text.trim(),
-  //                     'subtitle': 'New habit',
-  //                     'icon': Icons.check_circle_outline_rounded,
-  //                     'completed': false,
-  //                   });
-  //                 });
-
-  //                 Navigator.pop(context);
-  //               }
-  //             },
-  //             style: ElevatedButton.styleFrom(
-  //               backgroundColor: const Color(0xFF667EEA),
-  //               foregroundColor: Colors.white,
-  //               shape: RoundedRectangleBorder(
-  //                 borderRadius: BorderRadius.circular(12),
-  //               ),
-  //             ),
-  //             child: const Text('Add Habit'),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
 
   // ----------------------------------------------------------
   // DATE

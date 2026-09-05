@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AddHabitScreen extends StatefulWidget {
@@ -16,6 +18,8 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
 
   TimeOfDay selectedTime = const TimeOfDay(hour: 8, minute: 0);
 
+  bool isCreating = false;
+
   final List<Map<String, dynamic>> categories = [
     {'name': 'Health', 'icon': Icons.favorite_rounded},
     {'name': 'Fitness', 'icon': Icons.fitness_center_rounded},
@@ -30,6 +34,10 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     super.dispose();
   }
 
+  // ----------------------------------------------------------
+  // SELECT TIME
+  // ----------------------------------------------------------
+
   Future<void> _selectTime() async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
@@ -43,38 +51,158 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     }
   }
 
-  void _createHabit() {
-    if (habitController.text.trim().isEmpty) {
+  // ----------------------------------------------------------
+  // CREATE HABIT
+  // ----------------------------------------------------------
+
+  Future<void> _createHabit() async {
+    final String habitName = habitController.text.trim();
+    final String goal = goalController.text.trim();
+
+    // Validate habit name
+    if (habitName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a habit name')),
       );
       return;
     }
 
-    Navigator.pop(context);
+    // Validate goal
+    if (goal.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your daily goal')),
+      );
+      return;
+    }
+
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    // Check login
+    if (user == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please login again')));
+      return;
+    }
+
+    setState(() {
+      isCreating = true;
+    });
+
+    try {
+      // ------------------------------------------------------
+      // SAVE HABIT TO FIRESTORE
+      // ------------------------------------------------------
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('habits')
+          .add({
+            'title': habitName,
+
+            // Used in HomeScreen
+            'subtitle': '$goal times',
+
+            'category': selectedCategory,
+
+            'frequency': selectedFrequency,
+
+            'goal': int.tryParse(goal) ?? 0,
+
+            // Save reminder as readable string
+            'reminderTime': selectedTime.format(context),
+
+            // New habit is not completed
+            'completed': false,
+
+            // Icon for HomeScreen
+            'iconCode': _getCategoryIcon(selectedCategory).codePoint,
+
+            'createdAt': FieldValue.serverTimestamp(),
+
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Habit created successfully 🎉'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Go back to HomeScreen
+      Navigator.pop(context);
+    } catch (e) {
+      debugPrint('Create Habit Error: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to create habit: $e'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      setState(() {
+        isCreating = false;
+      });
+    }
+  }
+
+  // ----------------------------------------------------------
+  // CATEGORY ICON
+  // ----------------------------------------------------------
+
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'Health':
+        return Icons.favorite_rounded;
+
+      case 'Fitness':
+        return Icons.fitness_center_rounded;
+
+      case 'Study':
+        return Icons.menu_book_rounded;
+
+      case 'Personal':
+        return Icons.person_rounded;
+
+      default:
+        return Icons.check_circle_outline_rounded;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
+
     final bool isDesktop = width >= 900;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
+
       appBar: AppBar(
         backgroundColor: const Color(0xFFF7F8FC),
         elevation: 0,
         centerTitle: true,
+
         leading: IconButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: isCreating
+              ? null
+              : () {
+                  Navigator.pop(context);
+                },
           icon: const Icon(
             Icons.arrow_back_ios_new_rounded,
             size: 20,
             color: Color(0xFF202336),
           ),
         ),
+
         title: const Text(
           'Add New Habit',
           style: TextStyle(
@@ -84,47 +212,61 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
           ),
         ),
       ),
+
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: isDesktop ? 850 : 600),
+
             child: SingleChildScrollView(
               padding: EdgeInsets.symmetric(
                 horizontal: isDesktop ? 30 : 20,
                 vertical: 10,
               ),
+
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildIntro(),
+
                   const SizedBox(height: 25),
 
                   _buildSectionTitle('Habit Name'),
+
                   const SizedBox(height: 10),
+
                   _buildHabitNameField(),
 
                   const SizedBox(height: 25),
 
                   _buildSectionTitle('Category'),
+
                   const SizedBox(height: 12),
+
                   _buildCategories(),
 
                   const SizedBox(height: 25),
 
                   _buildSectionTitle('Frequency'),
+
                   const SizedBox(height: 12),
+
                   _buildFrequency(),
 
                   const SizedBox(height: 25),
 
                   _buildSectionTitle('Daily Goal'),
+
                   const SizedBox(height: 10),
+
                   _buildGoalField(),
 
                   const SizedBox(height: 25),
 
                   _buildSectionTitle('Reminder'),
+
                   const SizedBox(height: 10),
+
                   _buildReminder(),
 
                   const SizedBox(height: 35),
@@ -149,6 +291,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
+
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -157,15 +300,18 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
         ),
         borderRadius: BorderRadius.circular(24),
       ),
+
       child: Row(
         children: [
           Container(
             width: 55,
             height: 55,
+
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(17),
             ),
+
             child: const Icon(
               Icons.add_task_rounded,
               color: Colors.white,
@@ -187,7 +333,9 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+
                 SizedBox(height: 5),
+
                 Text(
                   'Small steps every day create big changes.',
                   style: TextStyle(color: Colors.white70, fontSize: 12),
@@ -223,16 +371,23 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     return TextField(
       controller: habitController,
       textInputAction: TextInputAction.next,
+
       decoration: InputDecoration(
         hintText: 'e.g. Drink Water',
+
         hintStyle: const TextStyle(color: Color(0xFF9A9EAE), fontSize: 14),
+
         prefixIcon: const Icon(Icons.edit_rounded, color: Color(0xFF667EEA)),
+
         filled: true,
+
         fillColor: Colors.white,
+
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
           vertical: 17,
         ),
+
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
@@ -249,27 +404,36 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     return Wrap(
       spacing: 10,
       runSpacing: 10,
+
       children: categories.map((category) {
         final bool selected = selectedCategory == category['name'];
 
         return GestureDetector(
-          onTap: () {
-            setState(() {
-              selectedCategory = category['name'];
-            });
-          },
+          onTap: isCreating
+              ? null
+              : () {
+                  setState(() {
+                    selectedCategory = category['name'];
+                  });
+                },
+
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
+
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+
             decoration: BoxDecoration(
               color: selected ? const Color(0xFF667EEA) : Colors.white,
+
               borderRadius: BorderRadius.circular(14),
+
               border: Border.all(
                 color: selected
                     ? const Color(0xFF667EEA)
                     : const Color(0xFFE7E8EE),
               ),
             ),
+
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -278,7 +442,9 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                   size: 18,
                   color: selected ? Colors.white : const Color(0xFF667EEA),
                 ),
+
                 const SizedBox(width: 7),
+
                 Text(
                   category['name'],
                   style: TextStyle(
@@ -302,13 +468,16 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
   Widget _buildFrequency() {
     return Container(
       padding: const EdgeInsets.all(5),
+
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
       ),
+
       child: Row(
         children: [
           Expanded(child: _frequencyButton('Daily')),
+
           Expanded(child: _frequencyButton('Weekly')),
         ],
       ),
@@ -319,23 +488,31 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     final bool selected = selectedFrequency == value;
 
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedFrequency = value;
-        });
-      },
+      onTap: isCreating
+          ? null
+          : () {
+              setState(() {
+                selectedFrequency = value;
+              });
+            },
+
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+
         padding: const EdgeInsets.symmetric(vertical: 14),
+
         decoration: BoxDecoration(
           color: selected ? const Color(0xFF667EEA) : Colors.transparent,
+
           borderRadius: BorderRadius.circular(12),
         ),
+
         child: Center(
           child: Text(
             value,
             style: TextStyle(
               color: selected ? Colors.white : const Color(0xFF777B8E),
+
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -352,19 +529,29 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
   Widget _buildGoalField() {
     return TextField(
       controller: goalController,
+
       keyboardType: TextInputType.number,
+
       decoration: InputDecoration(
         hintText: 'e.g. 8',
+
         hintStyle: const TextStyle(color: Color(0xFF9A9EAE), fontSize: 14),
+
         prefixIcon: const Icon(Icons.flag_rounded, color: Color(0xFF667EEA)),
+
         suffixText: 'times',
+
         suffixStyle: const TextStyle(color: Color(0xFF8A8FA3), fontSize: 13),
+
         filled: true,
+
         fillColor: Colors.white,
+
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
           vertical: 17,
         ),
+
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
@@ -379,23 +566,29 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
 
   Widget _buildReminder() {
     return GestureDetector(
-      onTap: _selectTime,
+      onTap: isCreating ? null : _selectTime,
+
       child: Container(
         width: double.infinity,
+
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
+
         child: Row(
           children: [
             Container(
               width: 40,
               height: 40,
+
               decoration: BoxDecoration(
                 color: const Color(0xFFF0F1FF),
                 borderRadius: BorderRadius.circular(12),
               ),
+
               child: const Icon(
                 Icons.notifications_active_rounded,
                 color: Color(0xFF667EEA),
@@ -417,7 +610,9 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                       color: Color(0xFF202336),
                     ),
                   ),
+
                   SizedBox(height: 3),
+
                   Text(
                     'Tap to choose reminder time',
                     style: TextStyle(fontSize: 11, color: Color(0xFF9A9EAE)),
@@ -428,6 +623,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
 
             Text(
               selectedTime.format(context),
+
               style: const TextStyle(
                 color: Color(0xFF667EEA),
                 fontSize: 14,
@@ -452,27 +648,47 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     return SizedBox(
       width: double.infinity,
       height: 56,
+
       child: ElevatedButton(
-        onPressed: _createHabit,
+        onPressed: isCreating ? null : _createHabit,
+
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF667EEA),
+          disabledBackgroundColor: const Color(0xFF667EEA).withOpacity(0.6),
+
           foregroundColor: Colors.white,
+
           elevation: 0,
+
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(17),
           ),
         ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_rounded, size: 22),
-            SizedBox(width: 8),
-            Text(
-              'Create Habit',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
+
+        child: isCreating
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+
+                children: [
+                  Icon(Icons.check_rounded, size: 22),
+
+                  SizedBox(width: 8),
+
+                  Text(
+                    'Create Habit',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
       ),
     );
   }
