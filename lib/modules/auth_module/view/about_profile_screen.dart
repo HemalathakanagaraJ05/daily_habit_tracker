@@ -1,4 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_habit_tracker/modules/auth_module/view/botton_appbar_Screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -11,8 +16,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController ageController = TextEditingController();
 
+  bool isLoading = false;
+
   TimeOfDay? wakeUpTime;
   TimeOfDay? sleepTime;
+
+  String? nameError;
+  String? ageError;
+  String? wakeUpError;
+  String? sleepError;
 
   String selectedGoal = 'Build Consistency';
 
@@ -25,11 +37,36 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+
+    nameController.addListener(() {
+      if (nameError != null && nameController.text.trim().isNotEmpty) {
+        setState(() {
+          nameError = null;
+        });
+      }
+    });
+
+    ageController.addListener(() {
+      if (ageError != null && ageController.text.trim().isNotEmpty) {
+        setState(() {
+          ageError = null;
+        });
+      }
+    });
+  }
+
+  @override
   void dispose() {
     nameController.dispose();
     ageController.dispose();
     super.dispose();
   }
+
+  // =========================
+  // SELECT TIME
+  // =========================
 
   Future<void> _selectTime(bool isWakeUp) async {
     final TimeOfDay? picked = await showTimePicker(
@@ -41,12 +78,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       setState(() {
         if (isWakeUp) {
           wakeUpTime = picked;
+          wakeUpError = null;
         } else {
           sleepTime = picked;
+          sleepError = null;
         }
       });
     }
   }
+
+  // =========================
+  // FORMAT TIME
+  // =========================
 
   String _formatTime(TimeOfDay? time) {
     if (time == null) {
@@ -60,33 +103,133 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     return '$hour:$minute $period';
   }
 
-  void _continue() {
+  // =========================
+  // CONTINUE / VALIDATION
+  // =========================
+
+  Future<void> _continue() async {
+    // Clear old errors
+    setState(() {
+      nameError = null;
+      ageError = null;
+      wakeUpError = null;
+      sleepError = null;
+    });
+
+    bool isValid = true;
+
+    // Name validation
     if (nameController.text.trim().isEmpty) {
-      _showMessage('Please enter your name');
-      return;
+      nameError = 'Please enter your name';
+      isValid = false;
     }
 
+    // Age validation
     if (ageController.text.trim().isEmpty) {
-      _showMessage('Please enter your age');
-      return;
+      ageError = 'Please enter your age';
+      isValid = false;
+    } else {
+      final int? age = int.tryParse(ageController.text.trim());
+
+      if (age == null) {
+        ageError = 'Please enter a valid age';
+        isValid = false;
+      } else if (age < 1 || age > 100) {
+        ageError = 'Age must be between 1 and 100';
+        isValid = false;
+      }
     }
 
+    // Wake-up validation
     if (wakeUpTime == null) {
-      _showMessage('Please select your wake-up time');
-      return;
+      wakeUpError = 'Please select your wake-up time';
+      isValid = false;
     }
 
+    // Sleep validation
     if (sleepTime == null) {
-      _showMessage('Please select your sleep time');
+      sleepError = 'Please select your sleep time';
+      isValid = false;
+    }
+
+    // Stop if validation failed
+    if (!isValid) {
+      setState(() {});
       return;
     }
 
-    // Firebase save will be added here next.
-    _showMessage('Profile details completed');
+    // =========================
+    // GET CURRENT USER
+    // =========================
 
-    // Next step:
-    // Firebase save → HomeScreen
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      _showMessage('User session not found. Please login again.');
+      return;
+    }
+
+    // =========================
+    // START LOADING
+    // =========================
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      // =========================
+      // SAVE TO FIRESTORE
+      // =========================
+
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'name': nameController.text.trim(),
+        'email': user.email ?? '',
+        'age': int.parse(ageController.text.trim()),
+        'wakeUpTime': _formatTime(wakeUpTime),
+        'sleepTime': _formatTime(sleepTime),
+        'dailyGoal': selectedGoal,
+        'profileCompleted': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+
+      // =========================
+      // STOP LOADING
+      // =========================
+
+      setState(() {
+        isLoading = false;
+      });
+
+      // =========================
+      // GO TO HOME
+      // =========================
+
+      Get.to(() => const BottomScreen());
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      _showMessage(e.message ?? 'Unable to save profile.');
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      _showMessage('Something went wrong. Please try again.');
+    }
   }
+  // =========================
+  // SNACKBAR
+  // =========================
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -97,6 +240,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       ),
     );
   }
+
+  // =========================
+  // BUILD
+  // =========================
 
   @override
   Widget build(BuildContext context) {
@@ -117,10 +264,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // =========================
+                  // TOP ICON
+                  // =========================
                   _buildTopIcon(),
 
                   const SizedBox(height: 28),
 
+                  // =========================
+                  // TITLE
+                  // =========================
                   const Text(
                     'Tell us about you 👋',
                     style: TextStyle(
@@ -143,6 +296,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
                   const SizedBox(height: 30),
 
+                  // =========================
+                  // BASIC INFORMATION
+                  // =========================
                   _buildSectionCard(
                     title: 'Basic Information',
                     child: Column(
@@ -152,6 +308,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           label: 'Your Name',
                           hint: 'Enter your name',
                           icon: Icons.person_outline_rounded,
+                          errorText: nameError,
                         ),
 
                         const SizedBox(height: 16),
@@ -162,6 +319,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           hint: 'Enter your age',
                           icon: Icons.cake_outlined,
                           keyboardType: TextInputType.number,
+                          errorText: ageError,
                         ),
                       ],
                     ),
@@ -169,6 +327,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
                   const SizedBox(height: 18),
 
+                  // =========================
+                  // YOUR ROUTINE
+                  // =========================
                   _buildSectionCard(
                     title: 'Your Routine',
                     child: Column(
@@ -178,6 +339,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           subtitle: _formatTime(wakeUpTime),
                           icon: Icons.wb_sunny_outlined,
                           onTap: () => _selectTime(true),
+                          errorText: wakeUpError,
                         ),
 
                         const SizedBox(height: 12),
@@ -187,6 +349,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           subtitle: _formatTime(sleepTime),
                           icon: Icons.bedtime_outlined,
                           onTap: () => _selectTime(false),
+                          errorText: sleepError,
                         ),
                       ],
                     ),
@@ -194,6 +357,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
                   const SizedBox(height: 18),
 
+                  // =========================
+                  // YOUR GOAL
+                  // =========================
                   _buildSectionCard(
                     title: 'Your Goal',
                     child: Column(
@@ -213,14 +379,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           spacing: 10,
                           runSpacing: 10,
                           children: goals.map((goal) {
-                            final isSelected = selectedGoal == goal;
+                            final bool isSelected = selectedGoal == goal;
 
                             return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  selectedGoal = goal;
-                                });
-                              },
+                              onTap: isLoading
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        selectedGoal = goal;
+                                      });
+                                    },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
                                 padding: const EdgeInsets.symmetric(
@@ -258,38 +426,57 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
                   const SizedBox(height: 28),
 
+                  // =========================
+                  // CONTINUE BUTTON
+                  // =========================
                   SizedBox(
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton(
-                      onPressed: _continue,
+                      onPressed: isLoading ? null : _continue,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF667EEA),
                         foregroundColor: Colors.white,
+                        disabledBackgroundColor: const Color(0xFF667EEA),
+                        disabledForegroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Continue',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
+                      child: isLoading
+                          ? const SizedBox(
+                              width: 23,
+                              height: 23,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Continue',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Icon(Icons.arrow_forward_rounded, size: 20),
+                              ],
                             ),
-                          ),
-                          SizedBox(width: 8),
-                          Icon(Icons.arrow_forward_rounded, size: 20),
-                        ],
-                      ),
                     ),
                   ),
 
                   const SizedBox(height: 15),
 
+                  // =========================
+                  // FOOTER TEXT
+                  // =========================
                   const Center(
                     child: Text(
                       'You can update these details later from your profile.',
@@ -305,6 +492,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       ),
     );
   }
+
+  // =========================
+  // TOP ICON
+  // =========================
 
   Widget _buildTopIcon() {
     return Container(
@@ -323,6 +514,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       ),
     );
   }
+
+  // =========================
+  // SECTION CARD
+  // =========================
 
   Widget _buildSectionCard({required String title, required Widget child}) {
     return Container(
@@ -344,12 +539,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               color: Color(0xFF202336),
             ),
           ),
+
           const SizedBox(height: 17),
+
           child,
         ],
       ),
     );
   }
+
+  // =========================
+  // TEXT FIELD
+  // =========================
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -357,6 +558,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     required String hint,
     required IconData icon,
     TextInputType? keyboardType,
+    String? errorText,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,12 +571,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             color: Color(0xFF555A6E),
           ),
         ),
+
         const SizedBox(height: 7),
+
         TextField(
           controller: controller,
           keyboardType: keyboardType,
           decoration: InputDecoration(
             hintText: hint,
+            errorText: errorText,
             hintStyle: const TextStyle(fontSize: 13, color: Color(0xFFB0B3BF)),
             prefixIcon: Icon(icon, color: const Color(0xFF667EEA), size: 21),
             filled: true,
@@ -394,70 +599,107 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 width: 1.5,
               ),
             ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+            ),
           ),
         ),
       ],
     );
   }
 
+  // =========================
+  // TIME TILE
+  // =========================
+
   Widget _buildTimeTile({
     required String title,
     required String subtitle,
     required IconData icon,
     required VoidCallback onTap,
+    String? errorText,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8F9FC),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: isLoading ? null : onTap,
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: const Color(0xFFE8E9EF)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F2FF),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(icon, color: const Color(0xFF667EEA), size: 22),
-            ),
-
-            const SizedBox(width: 13),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF202336),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF8A8FA3),
-                    ),
-                  ),
-                ],
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F9FC),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                color: errorText != null ? Colors.red : const Color(0xFFE8E9EF),
               ),
             ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F2FF),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(icon, color: const Color(0xFF667EEA), size: 22),
+                ),
 
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFF9A9EAE)),
-          ],
+                const SizedBox(width: 13),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF202336),
+                        ),
+                      ),
+
+                      const SizedBox(height: 4),
+
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF8A8FA3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF9A9EAE),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
+
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              errorText,
+              style: const TextStyle(fontSize: 12, color: Colors.red),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

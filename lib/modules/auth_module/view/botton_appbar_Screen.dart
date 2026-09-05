@@ -6,14 +6,14 @@ import '../../Home_module/view/home_screen.dart';
 import '../../history/view/history_screen.dart';
 import '../../profile/view/profile_screen.dart';
 
-class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
+class BottomScreen extends StatefulWidget {
+  const BottomScreen({super.key});
 
   @override
-  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+  State<BottomScreen> createState() => _BottomScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _BottomScreenState extends State<BottomScreen> {
   int selectedIndex = 0;
 
   final List<Widget> screens = const [
